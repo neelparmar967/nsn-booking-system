@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:5000";
+const API_BASE_URL = window.location.origin;
 let selectedConsole = "";
 let slotPolling = null;
 let activeOtpToken = "";

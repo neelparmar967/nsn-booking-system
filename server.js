@@ -8,6 +8,7 @@ const path = require("path");
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(__dirname));
 
 const razorpay = new Razorpay({
   key_id: "YOUR_KEY_ID",
@@ -350,6 +351,18 @@ app.delete("/delete/:id", (req, res) => {
   }
 
   return res.json({ success: false, message: "Invalid booking id" });
+});
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+app.get("/booking", (req, res) => {
+  res.sendFile(path.join(__dirname, "booking.html"));
+});
+
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "admin.html"));
 });
 
 app.listen(PORT, () => {
