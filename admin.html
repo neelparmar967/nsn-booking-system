@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="adminHeader">
+  <h1>Admin Dashboard</h1>
+  <div id="totalPriceCard" class="totalPriceCard">Total Price: Rs. 0</div>
+</div>
+
+<div class="panel">
+  <h2>Verify Receipt</h2>
+  <input id="receiptCode" placeholder="Enter receipt code">
+  <button onclick="verifyReceipt()">Verify Customer</button>
+  <div id="receiptResult"></div>
+</div>
+
+<div id="bookingsList"></div>
+
+<script>
+const API_BASE_URL = "http://localhost:5000";
+let timers = {};
+let alertedBookings = new Set();
+
+function getBookingStart(booking) {
+  return booking.startedAt ? new Date(booking.startedAt) : new Date(`${booking.date}T${booking.time}`);
+}
+
+function getBookingEnd(booking) {
+  const start = getBookingStart(booking);
+  return new Date(start.getTime() + booking.hours * 3600000);
+}
+
+function getStatus(booking) {
+  if (booking.vacatedAt) return "VACATED";
+
+  const now = new Date();
+  const start = getBookingStart(booking);
+  const end = getBookingEnd(booking);
+
+  if (!booking.checkedIn) return "AWAITING CHECK-IN";
+  if (now > end) return "FINISHED";
+  if (now >= start && now <= end) return "ACTIVE";
+  return "UPCOMING";
+}
+
+function getStatusClass(status) {
+  if (status === "VACATED") return "statusVacated";
+  if (status === "AWAITING CHECK-IN") return "statusUpcoming";
+  if (status === "FINISHED") return "statusFinished";
+  if (status === "ACTIVE") return "statusActive";
+  return "statusUpcoming";
+}
+
+async function loadBookings() {
+  const response = await fetch(`${API_BASE_URL}/bookings`);
+
+  if (!response.ok) {
+    document.getElementById("bookingsList").innerHTML = "<p>Unable to load bookings.</p>";
+    return;
+  }
+
+  const bookings = await response.json();
+  const sortedBookings = bookings
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const totalPrice = bookings.reduce((sum, booking) => sum + Number(booking.price || 0), 0);
+
+  document.getElementById("totalPriceCard").innerText = `Total Price: Rs. ${totalPrice}`;
+
+  if (!sortedBookings.length) {
+    document.getElementById("bookingsList").innerHTML = "<p>No bookings yet.</p>";
+    return;
+  }
+
+  let html = "";
+
+  sortedBookings.forEach((booking) => {
+    const end = getBookingEnd(booking);
+    const status = getStatus(booking);
+    const timerText = booking.vacatedAt
+      ? "VACATED"
+      : booking.checkedIn
+        ? "Loading..."
+        : "Timer starts after receipt verification";
+
+    html += `
+      <div class="adminCard">
+        <div class="statusBadge ${getStatusClass(status)}">${status}</div>
+        <div class="detailRow"><span class="detailLabel">Name</span><span>${booking.name}</span></div>
+        <div class="detailRow"><span class="detailLabel">Console</span><span>${booking.console.toUpperCase()}</span></div>
+        <div class="detailRow"><span class="detailLabel">PS No.</span><span>PS ${booking.psNumber}</span></div>
+        <div class="detailRow"><span class="detailLabel">Booking Type</span><span>${booking.bookingType === "play_now" ? "Play Now" : "Book For Later"}</span></div>
+        <div class="detailRow"><span class="detailLabel">Players</span><span>${booking.players || 1}</span></div>
+        <div class="detailRow"><span class="detailLabel">Controllers</span><span>${booking.controllers || 1}</span></div>
+        <div class="detailRow"><span class="detailLabel">Slot</span><span>${booking.date} ${booking.time}</span></div>
+        <div class="detailRow"><span class="detailLabel">Duration</span><span>${booking.hours} Hour(s)</span></div>
+        <div class="detailRow"><span class="detailLabel">Price</span><span>Rs. ${booking.price || 0}</span></div>
+        <div class="detailRow"><span class="detailLabel">Phone</span><span>${booking.phone}</span></div>
+        <div class="detailRow"><span class="detailLabel">Receipt</span><span>${booking.receiptCode}</span></div>
+        <div class="detailRow"><span class="detailLabel">Entry</span><span>${booking.checkedIn ? "Verified" : "Not verified"}</span></div>
+        <div class="vacantAlert" id="vacant-${booking.id}" ${booking.vacatedAt ? 'style="display:block;"' : ""}>Vacate this slot when the timer ends.</div>
+        <div id="timer-${booking.id}" class="timerPill ${booking.vacatedAt ? "timerVacated" : ""}">${timerText}</div>
+        <button onclick="vacateBooking('${booking.id}')" ${booking.vacatedAt ? "disabled" : ""}>${booking.vacatedAt ? "Vacated" : "Vacate Slot"}</button>
+        <button onclick="deleteBooking('${booking.id}')">Delete</button>
+      </div>
+    `;
+
+    if (booking.checkedIn && !booking.vacatedAt && status !== "FINISHED") {
+      setTimeout(() => {
+        startTimer(`timer-${booking.id}`, end);
+      }, 50);
+    }
+  });
+
+  document.getElementById("bookingsList").innerHTML = html;
+}
+
+function startTimer(id, endTime) {
+  if (timers[id]) {
+    clearInterval(timers[id]);
+  }
+
+  timers[id] = setInterval(() => {
+    const el = document.getElementById(id);
+
+    if (!el) {
+      clearInterval(timers[id]);
+      return;
+    }
+
+    const diff = endTime.getTime() - Date.now();
+
+    if (diff <= 0) {
+      el.innerText = "FINISHED";
+      el.className = "timerPill timerDone";
+      const bookingId = id.replace("timer-", "");
+      const vacantAlert = document.getElementById(`vacant-${bookingId}`);
+
+      if (vacantAlert) {
+        vacantAlert.style.display = "block";
+      }
+
+      if (!alertedBookings.has(bookingId)) {
+        alertedBookings.add(bookingId);
+        playBell();
+        alert("Timer ended. Please vacant this slot.");
+      }
+
+      clearInterval(timers[id]);
+      loadBookings();
+      return;
+    }
+
+    const hrs = Math.floor(diff / 3600000);
+    const min = Math.floor((diff % 3600000) / 60000);
+    const sec = Math.floor((diff % 60000) / 1000);
+
+    el.className = "timerPill";
+    el.innerText = `⏳ ${hrs}h ${min}m ${sec}s left`;
+  }, 1000);
+}
+
+function playBell() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+  if (!AudioContextClass) {
+    return;
+  }
+
+  const audioContext = new AudioContextClass();
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+
+  gainNode.gain.setValueAtTime(0.001, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.2, audioContext.currentTime + 0.02);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 1);
+
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 1);
+}
+
+async function verifyReceipt() {
+  const receiptCode = document.getElementById("receiptCode").value.trim();
+
+  if (!receiptCode) {
+    alert("Enter a receipt code");
+    return;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/verify-receipt`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ receiptCode })
+  });
+
+  const result = await response.json();
+  const receiptResult = document.getElementById("receiptResult");
+
+  if (!response.ok || !result.success) {
+    receiptResult.innerText = result.message || "Receipt verification failed";
+    return;
+  }
+
+  receiptResult.innerText = `${result.booking.name} verified for ${result.booking.console.toUpperCase()} at ${result.booking.time}`;
+  document.getElementById("receiptCode").value = "";
+  loadBookings();
+}
+
+async function vacateBooking(id) {
+  const response = await fetch(`${API_BASE_URL}/vacate-booking`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ bookingId: id })
+  });
+
+  const result = await response.json();
+
+  if (!response.ok || !result.success) {
+    alert(result.message || "Could not vacate booking");
+    return;
+  }
+
+  alert("Slot vacated successfully");
+  loadBookings();
+}
+
+async function deleteBooking(id) {
+  if (!confirm("Delete booking?")) return;
+
+  await fetch(`${API_BASE_URL}/delete/${id}`, {
+    method: "DELETE"
+  });
+
+  loadBookings();
+}
+
+loadBookings();
+setInterval(loadBookings, 3000);
+</script>
+
+</body>
+</html>

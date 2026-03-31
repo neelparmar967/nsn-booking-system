@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Book Slot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1 id="consoleName"></h1>
+
+<div class="panel compactPanel">
+  <label>Booking Type</label>
+  <select id="bookingMode" onchange="handleBookingModeChange()">
+    <option value="now">Play Now</option>
+    <option value="later">Book For Later</option>
+  </select>
+</div>
+
+<div id="slotInfo">Slots: 0 / 5</div>
+
+<input id="name" placeholder="Your Name">
+<input id="phone" placeholder="Phone Number">
+
+<div id="playNowInfo" class="panel compactPanel">
+  Current slot will be used for booking.
+</div>
+
+<div id="scheduleFields" style="display:none;">
+  <label>Date</label>
+  <input type="date" id="date" onchange="checkSlots()">
+
+  <label>Time</label>
+  <input type="time" id="time" min="10:00" max="22:00" step="900" onchange="checkSlots()">
+</div>
+
+<label>Number Of Players</label>
+<select id="players" onchange="handlePlayersChange()">
+  <option value="1">1 Player</option>
+  <option value="2">2 Players</option>
+  <option value="3">3 Players</option>
+  <option value="4">4 Players</option>
+</select>
+
+<label>Controllers Required</label>
+<select id="controllers" onchange="updatePriceDisplay()">
+  <option value="1">1 Controller</option>
+  <option value="2">2 Controllers</option>
+  <option value="3">3 Controllers</option>
+  <option value="4">4 Controllers</option>
+</select>
+
+<select id="hours" onchange="updatePriceDisplay()">
+  <option value="1">1 Hour</option>
+  <option value="2">2 Hours</option>
+</select>
+
+<div id="priceInfo" class="panel compactPanel">Price: Rs. 100</div>
+<div id="slotMeta" class="slotMeta">5 slot(s) remaining for this time.</div>
+
+<button id="sendOtpButton" onclick="requestOtp()">Send OTP</button>
+
+<div id="otpPanel" class="panel" style="display:none;">
+  <p id="demoOtpText"></p>
+  <p id="otpMessage"></p>
+  <input id="otp" placeholder="Enter OTP">
+  <button id="verifyOtpButton" onclick="verifyOtp()">Verify OTP & Confirm Booking</button>
+</div>
+
+<div id="receiptCard" class="panel" style="display:none;">
+  <h2>Booking Receipt</h2>
+  <div id="receiptDetails"></div>
+</div>
+
+<button onclick="goBack()">Back</button>
+
+<script src="script.js"></script>
+
+</body>
+</html>
